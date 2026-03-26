@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vāk — Neural Voice Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ── Reset & Tokens ──────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d0d0f;
+      --surface:   #141417;
+      --border:    #252529;
+      --border-hi: #3a3a42;
+      --text:      #e8e8ee;
+      --muted:     #6b6b7a;
+      --accent:    #e8c97a;     /* warm gold */
+      --accent2:   #7ac8e8;     /* cool cyan */
+      --danger:    #e87a7a;
+      --radius:    6px;
+      --font-serif: "DM Serif Display", Georgia, serif;
+      --font-mono:  "DM Mono", "Courier New", monospace;
+      --font-sans:  "Inter", system-ui, sans-serif;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Layout ─────────────────────────────────────────────────────── */
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      grid-template-columns: 1fr;
+    }
+
+    header {
+      padding: 28px 40px 22px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+    }
+
+    header h1 {
+      font-family: var(--font-serif);
+      font-size: 28px;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      color: var(--text);
+    }
+
+    header h1 em {
+      font-style: italic;
+      color: var(--accent);
+    }
+
+    header .tagline {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 400;
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 0;
+      overflow: hidden;
+    }
+
+    /* ── Left panel ─────────────────────────────────────────────────── */
+    .panel-left {
+      padding: 36px 40px;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .field-label {
+      display: block;
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+
+    textarea#text-input {
+      width: 100%;
+      height: 260px;
+      resize: vertical;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 14px;
+      line-height: 1.7;
+      padding: 14px 16px;
+      outline: none;
+      transition: border-color 0.18s ease;
+    }
+
+    textarea#text-input::placeholder { color: var(--muted); }
+
+    textarea#text-input:focus {
+      border-color: var(--border-hi);
+    }
+
+    .char-count {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted);
+      text-align: right;
+      margin-top: -16px;
+    }
+
+    /* ── Generate button ─────────────────────────────────────────────── */
+    .btn-generate {
+      align-self: flex-start;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 28px;
+      background: var(--accent);
+      color: #0d0d0f;
+      border: none;
+      border-radius: var(--radius);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 0.03em;
+      cursor: pointer;
+      transition: opacity 0.15s ease, transform 0.12s ease;
+    }
+
+    .btn-generate:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+    .btn-generate:active:not(:disabled) { transform: translateY(0); }
+    .btn-generate:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .btn-generate .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(0,0,0,0.2);
+      border-top-color: #0d0d0f;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+
+    .btn-generate.loading .spinner { display: block; }
+    .btn-generate.loading .btn-text::after { content: "…"; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Status & Player ─────────────────────────────────────────────── */
+    .status-bar {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--muted);
+      min-height: 20px;
+      transition: color 0.2s;
+    }
+
+    .status-bar.error { color: var(--danger); }
+    .status-bar.success { color: var(--accent2); }
+
+    .player-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    .player-wrap.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .player-label {
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    audio {
+      width: 100%;
+      border-radius: 4px;
+      accent-color: var(--accent);
+    }
+
+    .btn-download {
+      align-self: flex-start;
+      font-size: 12px;
+      font-family: var(--font-mono);
+      color: var(--accent);
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 6px 14px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: border-color 0.15s;
+    }
+
+    .btn-download:hover { border-color: var(--accent); }
+
+    /* ── Right panel — settings ──────────────────────────────────────── */
+    .panel-right {
+      padding: 36px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+      overflow-y: auto;
+    }
+
+    .settings-heading {
+      font-size: 10px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .setting-group { display: flex; flex-direction: column; gap: 6px; }
+
+    .setting-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .setting-name {
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--text);
+    }
+
+    .setting-value {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--accent);
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .setting-desc {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .divider {
+      height: 1px;
+      background: var(--border);
+    }
+
+    .voice-select-wrap { display: flex; flex-direction: column; gap: 8px; }
+
+    select, input[type="text"] {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      padding: 8px 10px;
+      outline: none;
+      appearance: none;
+      transition: border-color 0.15s;
+    }
+
+    select:focus, input[type="text"]:focus { border-color: var(--border-hi); }
+
+    option { background: var(--surface); }
+
+    /* ── Footer ─────────────────────────────────────────────────────── */
+    footer {
+      padding: 12px 40px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .footer-text {
+      font-size: 11px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+    }
+
+    .dot {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      margin-right: 6px;
+      vertical-align: middle;
+      transition: background 0.3s;
+    }
+
+    .dot.live { background: #5ee87a; animation: pulse 2s ease-in-out infinite; }
+    .dot.error { background: var(--danger); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* ── Responsive ─────────────────────────────────────────────────── */
+    @media (max-width: 720px) {
+      main { grid-template-columns: 1fr; }
+      .panel-left, .panel-right { padding: 24px 20px; }
+      .panel-left { border-right: none; border-bottom: 1px solid var(--border); }
+      header { padding: 20px; }
+      footer { padding: 12px 20px; }
+    }
+  </style>
+</head>
+
+<body>
+<div class="shell">
+
+  <!-- ── Header ──────────────────────────────────────────────────────── -->
+  <header>
+    <h1>V<em>ā</em>k</h1>
+    <span class="tagline">Neural Voice Studio</span>
+  </header>
+
+  <!-- ── Main ────────────────────────────────────────────────────────── -->
+  <main>
+
+    <!-- Left: Input + Player -->
+    <section class="panel-left">
+
+      <div>
+        <label class="field-label" for="text-input">Input Text</label>
+        <textarea id="text-input" placeholder="यहाँ हिंदी या अंग्रेज़ी में टाइप करें… / Type Hindi or English here…"></textarea>
+        <div class="char-count"><span id="char-count">0</span> characters</div>
+      </div>
+
+      <button class="btn-generate" id="btn-gen">
+        <span class="spinner"></span>
+        <span class="btn-text">Generate Audio</span>
+      </button>
+
+      <div class="status-bar" id="status">Ready.</div>
+
+      <div class="player-wrap" id="player-wrap">
+        <div class="player-label">Output</div>
+        <audio id="audio-player" controls></audio>
+        <a id="download-link" class="btn-download" download="synthesis.wav" href="#">↓ Download WAV</a>
+      </div>
+
+    </section>
+
+    <!-- Right: Settings -->
+    <aside class="panel-right">
+
+      <div class="settings-heading">Voice Settings</div>
+
+      <!-- Voice reference -->
+      <div class="voice-select-wrap">
+        <label class="field-label" for="audio-prompt">Reference Voice Path</label>
+        <input type="text" id="audio-prompt" value="data/shweta_singh.wav" />
+      </div>
+
+      <!-- Language -->
+      <div class="setting-group">
+        <label class="field-label" for="lang">Language</label>
+        <select id="lang">
+          <option value="hi">Hindi (hi)</option>
+          <option value="en">English (en)</option>
+          <option value="ta">Tamil (ta)</option>
+          <option value="te">Telugu (te)</option>
+          <option value="mr">Marathi (mr)</option>
+          <option value="bn">Bengali (bn)</option>
+        </select>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Exaggeration -->
+      <div class="setting-group">
+        <div class="setting-row">
+          <span class="setting-name">Exaggeration</span>
+          <span class="setting-value" id="val-exag">0.6</span>
+        </div>
+        <input type="range" id="exaggeration" min="0" max="1" step="0.05" value="0.6" />
+        <div class="setting-desc">Emotional intensity &amp; pacing. Higher = more animated &amp; faster.</div>
+      </div>
+
+      <!-- CFG Weight -->
+      <div class="setting-group">
+        <div class="setting-row">
+          <span class="setting-name">CFG Weight</span>
+          <span class="setting-value" id="val-cfg">0.3</span>
+        </div>
+        <input type="range" id="cfg-weight" min="0" max="1" step="0.05" value="0.3" />
+        <div class="setting-desc">Adherence to reference voice. Lower = closer match. Set 0.0 for cross-lingual cloning.</div>
+      </div>
+
+      <!-- Temperature -->
+      <div class="setting-group">
+        <div class="setting-row">
+          <span class="setting-name">Temperature</span>
+          <span class="setting-value" id="val-temp">0.4</span>
+        </div>
+        <input type="range" id="temperature" min="0.1" max="2.0" step="0.05" value="0.4" />
+        <div class="setting-desc">Stability vs. variety. Lower = consistent Hindi; higher = expressive but unstable.</div>
+      </div>
+
+      <!-- Max chars -->
+      <div class="setting-group">
+        <div class="setting-row">
+          <span class="setting-name">Chunk Size</span>
+          <span class="setting-value" id="val-chunk">300</span>
+        </div>
+        <input type="range" id="max-chars" min="50" max="800" step="25" value="300" />
+        <div class="setting-desc">Max characters per chunk sent to the model. Keep ≤ 300 for safety.</div>
+      </div>
+
+    </aside>
+  </main>
+
+  <!-- ── Footer ──────────────────────────────────────────────────────── -->
+  <footer>
+    <span class="footer-text">
+      <span class="dot" id="status-dot"></span>
+      <span id="footer-status">Checking service…</span>
+    </span>
+    <span class="footer-text">Chatterbox TTS · FastAPI · Node.js</span>
+  </footer>
+
+</div>
+
+<script>
+  // ── Slider live values ──────────────────────────────────────────────
+  const sliders = [
+    { el: "exaggeration", val: "val-exag" },
+    { el: "cfg-weight",   val: "val-cfg"  },
+    { el: "temperature",  val: "val-temp" },
+    { el: "max-chars",    val: "val-chunk"},
+  ];
+
+  sliders.forEach(({ el, val }) => {
+    const input = document.getElementById(el);
+    const display = document.getElementById(val);
+    input.addEventListener("input", () => (display.textContent = input.value));
+  });
+
+  // ── Char counter ────────────────────────────────────────────────────
+  const textInput = document.getElementById("text-input");
+  const charCount = document.getElementById("char-count");
+  textInput.addEventListener("input", () => (charCount.textContent = textInput.value.length));
+
+  // ── Health-check on load ────────────────────────────────────────────
+  const dot = document.getElementById("status-dot");
+  const footerStatus = document.getElementById("footer-status");
+
+  async function checkHealth() {
+    try {
+      const res = await fetch("/health");
+      if (res.ok) {
+        dot.className = "dot live";
+        footerStatus.textContent = "Gateway online";
+      } else {
+        throw new Error("Non-OK");
+      }
+    } catch {
+      dot.className = "dot error";
+      footerStatus.textContent = "Gateway unreachable";
+    }
+  }
+
+  checkHealth();
+
+  // ── Generation ─────────────────────────────────────────────────────
+  const btn = document.getElementById("btn-gen");
+  const statusEl = document.getElementById("status");
+  const playerWrap = document.getElementById("player-wrap");
+  const audioPlayer = document.getElementById("audio-player");
+  const downloadLink = document.getElementById("download-link");
+
+  function setStatus(msg, type = "") {
+    statusEl.textContent = msg;
+    statusEl.className = "status-bar" + (type ? ` ${type}` : "");
+  }
+
+  btn.addEventListener("click", async () => {
+    const text = textInput.value.trim();
+    if (!text) { setStatus("Please enter some text first.", "error"); return; }
+
+    // UI loading state
+    btn.disabled = true;
+    btn.classList.add("loading");
+    playerWrap.classList.remove("visible");
+    setStatus("Sending to ML service…");
+
+    const payload = {
+      text,
+      audio_prompt_path: document.getElementById("audio-prompt").value.trim(),
+      language_id:       document.getElementById("lang").value,
+      max_chars:     parseInt(document.getElementById("max-chars").value),
+      exaggeration:  parseFloat(document.getElementById("exaggeration").value),
+      cfg_weight:    parseFloat(document.getElementById("cfg-weight").value),
+      temperature:   parseFloat(document.getElementById("temperature").value),
+    };
+
+    try {
+      setStatus("Generating audio — this may take a moment…");
+
+      const res = await fetch("/api/synthesise", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || "Unknown error from server.");
+      }
+
+      // Convert streamed response to a Blob URL
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+
+      audioPlayer.src = url;
+      downloadLink.href = url;
+      playerWrap.classList.add("visible");
+
+      setStatus(`Done — ${(blob.size / 1024).toFixed(1)} KB WAV received.`, "success");
+    } catch (err) {
+      setStatus(`Error: ${err.message}`, "error");
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove("loading");
+    }
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+python-dotenv>=1.0.0
+huggingface_hub>=0.23.0
+torch>=2.3.0
+torchaudio>=2.3.0
+chatterbox-tts          # install from source if not on PyPI
+pydantic>=2.0.0
